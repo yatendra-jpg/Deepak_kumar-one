@@ -10,7 +10,7 @@ const app = express();
 app.use(express.json({ limit: "100kb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
-/* ===== ROOT (RENDER SAFE) ===== */
+/* ===== ROOT (SAFE FOR RENDER) ===== */
 app.get("/", (req, res) => {
   const p = path.join(__dirname, "public", "login.html");
   res.sendFile(p, err => {
@@ -18,15 +18,15 @@ app.get("/", (req, res) => {
   });
 });
 
-/* ===== SPEED (UNCHANGED) ===== */
-const HOURLY_LIMIT = 28;
-const PARALLEL = 3;     // SAME SPEED
-const DELAY_MS = 120;  // SAME SPEED
+/* ===== SPEED CONFIG (UNCHANGED) ===== */
+const HOURLY_LIMIT = 28;      // per Gmail ID
+const PARALLEL = 3;          // SAME SPEED
+const DELAY_MS = 120;        // SAME SPEED
 
 /* Gmail-wise stats */
 let stats = {};
 
-/* 🔁 HARD RESET EVERY 1 HOUR */
+/* 🔁 AUTO RESET EVERY 1 HOUR */
 setInterval(() => {
   stats = {};
   console.log("🧹 Hourly reset → Gmail limits cleared");
@@ -34,17 +34,17 @@ setInterval(() => {
 
 /* ===== ULTRA SAFE CONTENT LAYER ===== */
 
-/* Subject: natural, no spam signals */
-function safeSubject(s) {
-  return s
+/* Subject: clean, human-like */
+function safeSubject(subject) {
+  return subject
     .replace(/\s{2,}/g, " ")
     .replace(/([!?])\1+/g, "$1")
-    .replace(/^[A-Z\s]+$/, t => t.toLowerCase())
-    .replace(/free|urgent|act now/gi, "")
+    .replace(/^[A-Z\s]+$/, s => s.toLowerCase())
+    .replace(/free|urgent|act now|guarantee/gi, "")
     .trim();
 }
 
-/* Body: paragraphized, no keyword-only lines */
+/* Body: plain text, paragraph based */
 function safeBody(text) {
   let t = text
     .replace(/\r\n/g, "\n")
@@ -67,15 +67,15 @@ function safeBody(text) {
   return t;
 }
 
-/* ===== SAFE RATE CONTROL ===== */
+/* ===== SAFE SEND (RATE CONTROLLED) ===== */
 async function sendSafely(transporter, mails) {
   let sent = 0;
 
   for (let i = 0; i < mails.length; i += PARALLEL) {
-    const chunk = mails.slice(i, i + PARALLEL);
+    const batch = mails.slice(i, i + PARALLEL);
 
     const results = await Promise.allSettled(
-      chunk.map(m => transporter.sendMail(m))
+      batch.map(m => transporter.sendMail(m))
     );
 
     results.forEach(r => {
@@ -96,7 +96,7 @@ app.post("/send", async (req, res) => {
     return res.json({ success: false, msg: "Missing Fields ❌", count: 0 });
   }
 
-  /* LIMIT ONLY PER GMAIL */
+  /* INIT PER GMAIL LIMIT */
   if (!stats[gmail]) stats[gmail] = { count: 0 };
 
   if (stats[gmail].count >= HOURLY_LIMIT) {
@@ -124,7 +124,6 @@ app.post("/send", async (req, res) => {
   const finalSubject = safeSubject(subject);
   const finalText = safeBody(message) + "\n\nScanned & secured";
 
-  /* CLEAN SMTP (NO EXTRA HEADERS) */
   const transporter = nodemailer.createTransport({
     host: "smtp.gmail.com",
     port: 465,
@@ -160,8 +159,8 @@ app.post("/send", async (req, res) => {
   });
 });
 
-/* ===== START ===== */
+/* ===== START SERVER ===== */
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log("✅ MAX SAFE Mail Server running on port", PORT);
+  console.log("✅ SAFE Mail Server running on port", PORT);
 });
